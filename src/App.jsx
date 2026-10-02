@@ -9,9 +9,9 @@ import RecordingPlayer from './components/RecordingPlayer.jsx';
 import './App.css';
 
 const LEARNER_GOALS = [
-  { id: 'understood', label: 'Being easily understood', description: 'Focus on whether your intended message appears to come through.' },
-  { id: 'explore', label: 'Exploring my pronunciation', description: 'Notice differences without assuming they need to change.' },
-  { id: 'example', label: 'Practicing toward an example', description: 'Compare my speech more closely with an example pronunciation.' },
+  { id: 'understood', label: 'Being easily understood', description: 'Focus on whether your intended message was understood.' },
+  { id: 'explore', label: 'Exploring my pronunciation', description: 'Notice how your pronunciation compares with the example without setting a specific target.' },
+  { id: 'example', label: 'Practicing toward an example', description: 'Practice making your pronunciation closer to an example.' },
 ];
 
 function App() {
@@ -27,6 +27,7 @@ function App() {
   const [scenarioId, setScenarioId] = useState('');
   const [attemptNumber, setAttemptNumber] = useState(1);
   const [attempts, setAttempts] = useState([]);
+  const [explorationResponse, setExplorationResponse] = useState('');
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [sessionPhrases, setSessionPhrases] = useState(() => PHRASES.map((phrase) => ({
     phraseId: phrase.id, attempts: [], finalDecision: null,
@@ -96,6 +97,7 @@ function App() {
     setSessionPhrases(reset);
     setPhraseIndex(0);
     setAssessment(null);
+    setExplorationResponse('');
   }
 
   function practiceAgain() {
@@ -134,6 +136,7 @@ function App() {
     setError('');
     setExpanded(false);
     setAttemptNumber((number) => number + 1);
+    setExplorationResponse('');
     setStatus('idle');
     setScreen('practice');
   }
@@ -275,6 +278,7 @@ function App() {
       attemptsRef.current = [];
       setAttempts([]);
       setAssessment(null);
+      setExplorationResponse('');
       setAttemptNumber(1);
       setStatus('idle');
       setScreen('practice');
@@ -344,6 +348,7 @@ function App() {
       // The attempt now owns this URL; it must survive another recording.
       urlRef.current = '';
       setAssessment(result);
+      setExplorationResponse('');
       setExpanded(false);
       setStatus('ready');
       setScreen('feedback');
@@ -369,10 +374,14 @@ function App() {
   const returnedText = activeAssessment?.recognizedText?.trim() || '';
   const fullTranscriptMatch = transcriptMatchesReference(returnedText, feedbackReferenceText);
   const explicitIssue = ['Mispronunciation', 'Omission', 'Insertion'].includes(candidateFlaggedWord?.errorType);
-  const intelligibilityHasNoSpecificIssue = learnerGoal === 'understood' && fullTranscriptMatch && !explicitIssue;
-  const flaggedWordMatchesReference = referenceContainsWord(candidateFlaggedWord?.word, feedbackReferenceText);
-  const flaggedWord = !intelligibilityHasNoSpecificIssue ? candidateFlaggedWord : null;
   const substantialMismatch = activeAssessment?.alignment?.substantialMismatch === true;
+  const explorationWaiting = learnerGoal === 'explore' && !explorationResponse && !scenario;
+  const intelligibilityHasNoSpecificIssue = learnerGoal === 'understood' && fullTranscriptMatch && !explicitIssue;
+  const explorationHasNoSpecificIssue = learnerGoal === 'explore' && !explicitIssue;
+  const flaggedWordMatchesReference = referenceContainsWord(candidateFlaggedWord?.word, feedbackReferenceText);
+  const exampleHasSpecificIssue = learnerGoal === 'example' && !substantialMismatch && flaggedWordMatchesReference && explicitIssue;
+  const exampleHasNoSpecificIssue = learnerGoal === 'example' && !exampleHasSpecificIssue;
+  const flaggedWord = !intelligibilityHasNoSpecificIssue && !explorationHasNoSpecificIssue && !exampleHasNoSpecificIssue ? candidateFlaggedWord : null;
   const returnedTextHasWords = /[\p{L}\p{N}]/u.test(returnedText);
   const isMiscue = ['Omission', 'Insertion'].includes(flaggedWord?.errorType);
   
@@ -382,7 +391,7 @@ function App() {
     && Number.isFinite(flaggedWord?.accuracyScore)
     && flaggedWord.accuracyScore >= 0 && flaggedWord.accuracyScore <= 100;
   const hasUsefulWord = Boolean(!substantialMismatch && flaggedWord?.word && (isMiscue || showWordScore));
-  const goalDescription = LEARNER_GOALS.find((goal) => goal.id === learnerGoal)?.description;
+  const goalLabel = LEARNER_GOALS.find((goal) => goal.id === learnerGoal)?.label;
   const directMessage = !flaggedWordMatchesReference ? 'The model returned a word outside this practice sentence. Listen again before treating it as a pronunciation finding.'
     : flaggedWord?.errorType === 'Mispronunciation' ? 'Pronunciation needs improvement.'
     : flaggedWord?.errorType === 'Omission' ? 'The model may not have detected this word. Listen again before drawing a conclusion.'
@@ -390,7 +399,7 @@ function App() {
         : 'Lowest available model match. This comparison alone does not identify a pronunciation problem.';
   const reflectiveLabel = !flaggedWordMatchesReference ? 'Word returned outside the practice sentence'
     : learnerGoal === 'explore' ? 'A pronunciation difference the model noticed'
-    : learnerGoal === 'example' ? 'Comparison with the example'
+    : learnerGoal === 'example' ? 'A difference from the example'
     : flaggedWord?.errorType === 'Mispronunciation' ? 'Word the model had difficulty matching'
     : flaggedWord?.errorType === 'Omission' ? 'The assessment may have missed:'
       : flaggedWord?.errorType === 'Insertion' ? 'The assessment detected an extra word:'
@@ -413,6 +422,7 @@ function App() {
     : screen === 'complete'
       ? 'Practice complete.'
       : condition === 'C' ? 'What the system heard'
+        : learnerGoal === 'explore' && explorationWaiting ? 'Listen to your recording'
         : condition === 'B' ? 'Here’s what the model noticed' : 'Pronunciation Feedback';
 
   return (
@@ -448,7 +458,6 @@ function App() {
 
           {screen === 'goal' && (
             <div className="goal-selection">
-              <p className="session-reflection-label">Before you begin</p>
               <div className="goal-options" role="radiogroup" aria-label="Learner goal">
                 {LEARNER_GOALS.map((goal) => (
                   <button
@@ -505,14 +514,24 @@ function App() {
 
           {screen === 'feedback' && activeAssessment && (
             <>
-              {goalDescription && <p className="goal-context">Your focus: {goalDescription}</p>}
+              {goalLabel && <p className="goal-context">Your focus: {goalLabel}</p>}
               <div className={`feedback-content${condition !== 'A' ? ' reflective-content' : ''}${substantialMismatch ? ' feedback-mismatch' : ''}`}>
+                {explorationWaiting ? <div className="exploration-first-pass">
+                  <p className="label">Listen to your recording</p>
+                  {feedbackRecordingUrl ? <RecordingPlayer key={feedbackRecordingUrl} src={feedbackRecordingUrl} labelledBy="exploration-recording-label" playerRef={feedbackAudioRef} />
+                    : <p className="hint">Your recording is unavailable.</p>}
+                  <p id="exploration-recording-label" className="hint">Listen once before viewing the model’s comparison.</p>
+                  <LearnerResponse
+                    goal="explore"
+                    canListen={Boolean(feedbackRecordingUrl)}
+                    initialOnly
+                    onListen={listenAgain}
+                    onResponseChange={setExplorationResponse}
+                  />
+                </div> : <>
                 {learnerGoal === 'understood' && condition !== 'C' && returnedText && <div className="goal-evidence">
                   <p className="label">What the system heard</p>
                   <p className="returned-text-label"><q>{returnedText}</q></p>
-                  {fullTranscriptMatch
-                    ? <p className="match-context">The system returned the full intended sentence.</p>
-                    : <p className="match-context">The system did not return the full intended sentence. This does not necessarily mean a listener would have had the same difficulty.</p>}
                 </div>}
                 {condition === 'C' && <div className="transcript-feedback">
                   <p className="label">What the system heard</p>
@@ -533,12 +552,40 @@ function App() {
                     <blockquote>“{feedbackReferenceText}”</blockquote>
                     <p className="hint">Because the recording and practice sentence differed substantially, individual word feedback may not be meaningful.</p>
                   </div>
+                ) : explorationHasNoSpecificIssue ? (
+                  <div className="exploration-state" role="status">
+                    <p className="match-context">The model did not flag a specific pronunciation issue in this recording.</p>
+                    <p className="hint">If you’re curious, you can inspect how individual words matched its pronunciation reference.</p>
+                    <button className="explanation-toggle" aria-expanded={expanded} aria-controls="exploration-details" onClick={() => setExpanded(!expanded)}>
+                      View word comparisons <span aria-hidden="true">{expanded ? '▴' : '▾'}</span>
+                    </button>
+                    <div id="exploration-details" className="explanation" hidden={!expanded}>
+                      {(activeAssessment?.words || []).filter((word) => referenceContainsWord(word.word, feedbackReferenceText)).map((word) => (
+                        <p key={word.word}><strong>{word.word}</strong> · {Number.isFinite(word.accuracyScore) ? `${word.accuracyScore} / 100` : 'No score'}{word.errorType && word.errorType !== 'None' ? ` · ${word.errorType}` : ''}</p>
+                      ))}
+                    </div>
+                  </div>
+                ) : exampleHasNoSpecificIssue ? (
+                  <div className="exploration-state" role="status">
+                    <p className="match-context">The model did not flag a specific pronunciation difference to focus on in this recording.</p>
+                    <p className="hint">If you’re curious, you can inspect how individual words compared with the example.</p>
+                    <button className="explanation-toggle" aria-expanded={expanded} aria-controls="example-details" onClick={() => setExpanded(!expanded)}>
+                      View word comparisons <span aria-hidden="true">{expanded ? '▴' : '▾'}</span>
+                    </button>
+                    <div id="example-details" className="explanation" hidden={!expanded}>
+                      {(activeAssessment?.words || []).filter((word) => referenceContainsWord(word.word, feedbackReferenceText)).map((word) => (
+                        <p key={word.word}><strong>{word.word}</strong> · {Number.isFinite(word.accuracyScore) ? String(word.accuracyScore) + ' / 100' : 'No score'}{word.errorType && word.errorType !== 'None' ? ' · ' + word.errorType : ''}</p>
+                      ))}
+                    </div>
+                  </div>
                 ) : !hasUsefulWord ? (
-                  <p className="match-context" role="status">{substantialMismatch
-                    ? 'The recording did not align closely enough with the practice sentence to provide reliable word-level pronunciation feedback. Listen to what the system heard, then try another recording if useful.'
-                    : intelligibilityHasNoSpecificIssue
-                    ? 'The system did not identify a specific pronunciation issue to bring to your attention. This does not guarantee that every listener would understand the sentence the same way.'
-                    : 'I couldn’t make a reliable word-level assessment. Try another recording.'}</p>
+                  substantialMismatch ? <p className="match-context" role="status">The recording did not align closely enough with the practice sentence to provide reliable word-level pronunciation feedback. Listen to what the system heard, then try another recording if useful.</p>
+                  : intelligibilityHasNoSpecificIssue ? <div className="goal-interpretation" role="status">
+                    <p className="label">What this can tell you</p>
+                    <p>The system recognized the words you intended to say. This gives you one piece of evidence about how your message came through to the system.</p>
+                    <p className="hint">The system’s transcription does not guarantee that every listener would understand the recording the same way.</p>
+                  </div>
+                  : <p className="match-context" role="status">I couldn’t make a reliable word-level assessment. Try another recording.</p>
                 ) : <>
                 {condition !== 'A' && <p className="label">{reflectiveLabel}</p>}
                 <h2 className="word">{flaggedWord.word}</h2>
@@ -567,8 +614,9 @@ function App() {
                   </>
                 )}
                 </>}
+                </>}
               </div>
-              <div className={`feedback-comparison${learnerGoal === 'example' ? ' example-focused' : ''}`}>
+              <div className={`feedback-comparison${learnerGoal === 'example' ? ' example-focused' : ''}${explorationWaiting ? ' exploration-hidden' : ''}`}>
                 <div className="comparison-item">
                   <p className="label" id="feedback-recording-label">Your recording</p>
                   {feedbackRecordingUrl && !scenario ? <RecordingPlayer key={feedbackRecordingUrl} src={feedbackRecordingUrl} labelledBy="feedback-recording-label" playerRef={feedbackAudioRef} />
@@ -583,28 +631,30 @@ function App() {
                   <blockquote>“{feedbackReferenceText}”</blockquote>
                 </div>
               </div>
-              {!scenario && <AttemptComparison attempts={currentPhraseAttempts.slice(-2)} />}
-              {condition === 'A' ? <div className="actions">
+              {!scenario && !explorationWaiting && <AttemptComparison attempts={currentPhraseAttempts.slice(-2)} />}
+              {!explorationWaiting && (condition === 'A' ? <div className="actions">
                 <button className="primary full-width" onClick={practiceAgain}>Practice Again</button>
               </div> : <LearnerResponse
-                key={`${condition}-${scenarioId}`}
+                key={`${condition}-${scenarioId}-${explorationResponse}`}
                 word={hasUsefulWord ? flaggedWord.word : ''}
                 errorType={hasUsefulWord ? flaggedWord.errorType : ''}
                 canListen={Boolean(feedbackRecordingUrl && !scenario)}
+                goal={learnerGoal}
+                initialResponse={explorationResponse}
                 intelligibilityConfirmed={learnerGoal === 'understood' && fullTranscriptMatch}
                 onListen={listenAgain}
                 onHearExample={hearExampleAgain}
                 onPractice={() => { rememberPreference(flaggedWord?.word, 'practice'); startAnotherAttempt(); }}
                 onFinish={(keep) => { rememberPreference(flaggedWord?.word, keep ? 'keep' : 'unsure'); finishPractice(keep); }}
                 finishLabel={phraseIndex < PHRASES.length - 1 ? 'Next phrase' : 'Finish session'}
-              />}
+              />)}
             </>
           )}
 
           {screen === 'complete' && (
             <>
               <p className="session-reflection-label">Session complete</p>
-              <p className="hint">You practiced {sessionPhrases.filter((phrase) => phrase.attempts.length > 0).length} {sessionPhrases.filter((phrase) => phrase.attempts.length > 0).length === 1 ? 'phrase' : 'phrases'} and recorded your own view of the feedback.</p>
+              <p className="hint">You practiced {sessionPhrases.filter((phrase) => phrase.attempts.length > 0).length} {sessionPhrases.filter((phrase) => phrase.attempts.length > 0).length === 1 ? 'phrase' : 'phrases'} and shared your perspective on the feedback.</p>
               <div className="actions"><button className="secondary full-width" onClick={practiceAgain}>Start a New Practice</button></div>
             </>
           )}
