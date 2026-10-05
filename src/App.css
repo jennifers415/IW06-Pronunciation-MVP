@@ -99,7 +99,7 @@ audio { display: block; width: 100%; min-width: 0; margin-top: 10px; height: 48p
 .error { margin: 12px 0 0; color: #803c31; font-size: .875rem; }
 
 /* Feedback: observation, inspectable evidence, then learner response. */
-.feedback-content { margin: 24px 0; }
+.feedback-content { margin: 20px 0; }
 .exploration-first-pass .learner-response { margin-top: 28px; }
 .feedback-comparison.exploration-hidden { display: none; }
 .goal-evidence { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
@@ -125,17 +125,20 @@ audio { display: block; width: 100%; min-width: 0; margin-top: 10px; height: 48p
 .model-match-score dd::before { content: ': '; }
 .score { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 20px 0 0; color: var(--muted); }
 .score strong { color: #292f2d; font-size: 2rem; font-weight: 500; }
-.feedback-comparison { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding-block: 20px; border-block: 1px solid var(--line); }
+.feedback-comparison { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding-top: 8px; padding-bottom: 16px; }
 .feedback-comparison.example-focused .comparison-item:first-child,
 .feedback-comparison.example-focused .comparison-item:nth-child(2) { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: #f8f9f6; }
 .comparison-item { min-width: 0; }
 .comparison-sentence { grid-column: 1 / -1; }
 .feedback-comparison blockquote { margin-top: 6px; font-family: inherit; font-size: .9375rem; line-height: 1.6; letter-spacing: normal; color: var(--muted); }
-.attempt-comparison { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.attempt-comparison { margin-top: 20px; padding-top: 8px; }
+.attempt-count { display: inline; margin: 0 0 0 8px; color: var(--muted); font-size: .8125rem; }
+.attempt-toggle { display: flex; width: 100%; margin-top: 4px; }
 .attempt-comparison h2 { margin: 4px 0 0; font-size: 1.25rem; line-height: 1.4; }
 .attempt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
 .attempt-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: #f8f9f6; }
 .attempt-card audio { margin-top: 8px; }
+.attempt-alignment-note { margin: 12px 0 0; color: var(--muted); font-size: .8125rem; line-height: 1.5; }
 .attempt-comparison-toggle { margin-top: 16px; }
 .attempt-word-comparisons { margin-top: 8px; padding: 12px 0 0; border-top: 1px solid var(--line); }
 .attempt-word-comparisons .hint { margin-top: 0; }
@@ -156,6 +159,10 @@ audio { display: block; width: 100%; min-width: 0; margin-top: 10px; height: 48p
 .learner-response { margin-top: 24px; }
 .learner-response h2 { margin: 0 0 16px; font-size: 1.1875rem; line-height: 1.4; }
 .learner-response p { margin: 10px 0 0; font-size: .9375rem; }
+.perspective-summary { margin: 20px 0 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: #f8f9f6; }
+.perspective-summary .label { margin-top: 0; }
+.perspective-summary .label:not(:first-child) { margin-top: 14px; }
+.perspective-summary p:not(.label) { margin-top: 4px; }
 .preference-note { margin: 0 0 20px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: #f8f9f6; }
 .preference-note p { margin: 0; color: var(--muted); font-size: .875rem; line-height: 1.5; }
 .preference-note strong { color: #292f2d; font-weight: 500; }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-export default function LearnerResponse({ word, errorType, canListen, onListen, onPractice, onFinish, onHearExample, goal, intelligibilityConfirmed = false, finishLabel = 'Finish', initialOnly = false, initialResponse = '', onResponseChange }) {
+export default function LearnerResponse({ word, errorType, canListen, onListen, onPractice, onFinish, onHearExample, goal, finishLabel = 'Finish', initialOnly = false, initialResponse = '', onResponseChange, onAction, recordingMismatch = false }) {
   const [response, setResponse] = useState(initialResponse);
   const [playbackError, setPlaybackError] = useState('');
   const headingRef = useRef(null);
@@ -13,6 +13,7 @@ export default function LearnerResponse({ word, errorType, canListen, onListen, 
 
   async function listenAgain() {
     setPlaybackError('');
+    onAction?.('listen-again');
     try {
       await onListen();
     } catch {
@@ -38,15 +39,15 @@ export default function LearnerResponse({ word, errorType, canListen, onListen, 
     const understandingGoal = goal === 'understood';
     const exploringGoal = goal === 'explore';
     const exampleGoal = goal === 'example';
-    const firstChoice = understandingGoal ? 'understood' : exploringGoal ? 'explore' : exampleGoal ? 'example-practice' : 'practice';
-    const secondChoice = understandingGoal ? 'unclear' : exploringGoal ? 'none' : exampleGoal ? 'example-satisfied' : 'understandable';
+    const firstChoice = understandingGoal ? 'understood' : exploringGoal ? 'explore' : exampleGoal ? (initialOnly ? 'example-satisfied' : 'example-practice') : 'practice';
+    const secondChoice = understandingGoal ? 'unclear' : exploringGoal ? 'none' : exampleGoal ? (initialOnly ? 'example-practice' : 'example-satisfied') : 'understandable';
     return (
       <div className="response-choices" aria-label="Your response">
         <button className={response === firstChoice ? 'choice selected' : 'choice'} onClick={() => chooseResponse(firstChoice)}>
-          {response === firstChoice && <span aria-hidden="true">✓ </span>}{understandingGoal ? 'I think my message came through' : exploringGoal ? 'I noticed a difference I want to explore' : exampleGoal ? 'I notice a difference I want to practice' : 'I want to practice this'}
+          {response === firstChoice && <span aria-hidden="true">✓ </span>}{understandingGoal ? 'I think my message came through' : exploringGoal ? (initialOnly ? 'Something stands out to me' : 'I noticed a difference I want to explore') : exampleGoal ? (initialOnly ? 'They sound fairly similar' : 'I notice a difference I want to practice') : 'I want to practice this'}
         </button>
         <button className={response === secondChoice ? 'choice selected' : 'choice'} onClick={() => chooseResponse(secondChoice)}>
-          {response === secondChoice && <span aria-hidden="true">✓ </span>}{understandingGoal ? 'I think something could have been unclear' : exploringGoal ? 'Nothing here stands out to me' : exampleGoal ? 'I’m satisfied with how this compares' : 'I think I was understandable'}
+          {response === secondChoice && <span aria-hidden="true">✓ </span>}{understandingGoal ? 'I think something could have been unclear' : exploringGoal ? (initialOnly ? 'Nothing stands out to me' : 'Nothing here stands out to me') : exampleGoal ? (initialOnly ? 'I notice some differences' : 'I’m satisfied with how this compares') : 'I think I was understandable'}
         </button>
         <button className={response === 'unsure' ? 'choice selected' : 'choice'} onClick={() => chooseResponse('unsure')}>
           {response === 'unsure' && <span aria-hidden="true">✓ </span>}I’m not sure
@@ -55,21 +56,34 @@ export default function LearnerResponse({ word, errorType, canListen, onListen, 
     );
   }
 
-  const evidence = errorType === 'Mispronunciation'
+  const evidence = recordingMismatch ? 'The model couldn’t reliably compare this recording with the practice sentence.'
+    : errorType === 'Mispronunciation'
     ? `The model found a lower pronunciation match for “${word}”.`
     : errorType === 'Omission' ? `The model may not have detected “${word}”.`
       : errorType === 'Insertion' ? `The model may have detected “${word}” as an extra word.`
         : word ? `The model selected “${word}” by its lowest available match, without marking a pronunciation issue.`
-          : 'The model did not return a useful word-level assessment.';
+          : 'The model did not identify a specific word to highlight.';
 
   if (initialOnly) {
     return (
       <section className="learner-response learner-response-initial" aria-labelledby="learner-response-heading">
-        <h2 id="learner-response-heading" ref={headingRef} tabIndex={-1}>What stands out to you?</h2>
+        <h2 id="learner-response-heading" ref={headingRef} tabIndex={-1}>{goal === 'understood'
+          ? 'Listen to your recording. Do you think your message came through?'
+          : goal === 'example'
+            ? 'Listen to your recording and the example. How similar do they sound to you?'
+            : 'Listen to your recording. What stands out to you?'}</h2>
         {responseChoices()}
       </section>
     );
   }
+
+  const responseLabel = response === 'understood' ? 'I think my message came through'
+    : response === 'unclear' ? 'I think something could have been unclear'
+      : response === 'explore' ? 'I noticed a difference I want to explore'
+        : response === 'none' ? 'Nothing here stands out to me'
+          : response === 'example-practice' ? 'I notice a difference I want to practice'
+            : response === 'example-satisfied' ? 'I’m satisfied with how this compares'
+              : response === 'unsure' ? 'I’m not sure' : '';
 
   return (
     <section className="learner-response" aria-labelledby="learner-response-heading">
@@ -91,33 +105,20 @@ export default function LearnerResponse({ word, errorType, canListen, onListen, 
       ) : (
         <>
           {responseChoices()}
-          {intelligibilityConfirmed && goal === 'understood'
-            ? <>
-              <p className="label">What this can tell you</p>
-              <p>{response === 'unclear'
-                ? 'You noticed something that could have been unclear, so you can listen again or compare with an example.'
-                : response === 'understandable' || response === 'understood'
-                  ? 'You think your message came through in this recording.'
-                  : 'You can decide what to make of that evidence.'}</p>
-            </>
-            : response === 'understandable'
-              ? <p>{evidence} This assessment does not directly measure whether another listener would understand you.</p>
-                : response === 'practice'
-                ? <p>You can make another recording and compare what the system notices.</p>
-                : response === 'example-practice'
-                  ? <p>You noticed something you’d like to bring closer to the example. You can listen to both recordings again or try another recording.</p>
-                : response === 'example-satisfied'
-                  ? <p>You’re satisfied with this attempt. You can continue even if the model’s comparison is not identical to the example.</p>
-                : response === 'explore'
-                  ? <p>You noticed something you’d like to explore. You can listen again or compare it with the example.</p>
-                : response === 'none'
-                    ? <p>Nothing stood out to you in this recording. You can continue or inspect the model’s comparisons if you’re curious.</p>
-                : response === 'unsure' && goal === 'explore'
-                  ? <p>You don’t have to decide yet. You can listen again, compare with the example, or continue.</p>
-                : <p>{evidence} You can listen again or continue without resolving the question.</p>}
+          <div className="perspective-summary">
+            <p className="label">Your view</p>
+            <p>“{responseLabel}”</p>
+            <p className="label">What the model noticed</p>
+            <p>{evidence}</p>
+          </div>
+          <p className="hint response-guidance">{response === 'practice' || response === 'example-practice' || response === 'explore'
+            ? 'Listen again or try another recording.'
+            : response === 'unsure'
+              ? 'Listen again, inspect the available evidence, or continue.'
+              : 'You can listen again, practice again, or continue.'}</p>
           <div className="response-choices">
             {response !== 'practice' && <button className="choice" onClick={listenAgain} disabled={!canListen}>Listen again</button>}
-            {(response === 'unsure' || response === 'unclear') && <button className="choice" onClick={onHearExample}>Hear example</button>}
+            {(response === 'unsure' || response === 'unclear') && goal !== 'understood' && <button className="choice" onClick={onHearExample}>Hear example</button>}
             {response === 'practice'
               ? <button className="primary" onClick={onPractice}>Practice again</button>
               : response === 'explore'

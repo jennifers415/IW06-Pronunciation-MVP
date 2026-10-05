@@ -1,43 +1,60 @@
 import { useState } from 'react';
-import { referenceContainsWord } from '../../shared/assessment.js';
+import { formatWordScore, referenceContainsWord } from '../../shared/assessment.js';
 import RecordingPlayer from './RecordingPlayer.jsx';
 
 export default function AttemptComparison({ attempts }) {
+  const [showAttempts, setShowAttempts] = useState(false);
   const [showComparisons, setShowComparisons] = useState(false);
   if (attempts.length < 2) return null;
 
-  const referenceWords = (attempts[0].assessment?.words || [])
-    .filter((word) => referenceContainsWord(word.word, attempts[0].referenceText));
+  const alignedAttempts = attempts.filter((attempt) => attempt.assessment?.alignment?.substantialMismatch !== true);
+  const referenceAttempt = alignedAttempts[0];
+  const referenceWords = (referenceAttempt?.assessment?.words || [])
+    .filter((word) => referenceContainsWord(word.word, referenceAttempt.referenceText));
   const comparisonRows = referenceWords.map((word) => ({
     word: word.word,
-    values: attempts.map((attempt) => (attempt.assessment?.words || []).find((candidate) => (
-      candidate.word?.toLocaleLowerCase() === word.word?.toLocaleLowerCase()
-    )) || null),
+    values: attempts.map((attempt) => attempt.assessment?.alignment?.substantialMismatch === true
+      ? null
+      : (attempt.assessment?.words || []).find((candidate) => (
+        candidate.word?.toLocaleLowerCase() === word.word?.toLocaleLowerCase()
+      )) || null),
   }));
 
   return (
     <section className="attempt-comparison" aria-labelledby="attempt-comparison-heading">
       <p className="label">Your attempts</p>
-      <h2 id="attempt-comparison-heading">Listen and compare</h2>
-      <p className="hint">Listen to your recordings side by side. You may notice differences between attempts even when the model does not flag an issue.</p>
-      <div className="attempt-grid">
+      <p className="attempt-count">{attempts.length} recordings</p>
+      <button
+        className="explanation-toggle attempt-toggle"
+        aria-expanded={showAttempts}
+        aria-controls="attempt-details"
+        onClick={() => setShowAttempts((visible) => !visible)}
+      >
+        {showAttempts ? 'Hide attempt comparison' : 'Compare attempts'}
+        <span aria-hidden="true">{showAttempts ? '▴' : '▾'}</span>
+      </button>
+      <div id="attempt-details" hidden={!showAttempts}>
+        <h2 id="attempt-comparison-heading">Listen and compare</h2>
+        <p className="hint">Listen to your recordings side by side. You may notice differences between attempts even when the model does not flag an issue.</p>
+        <div className="attempt-grid">
         {attempts.map((attempt, index) => {
           const labelId = `attempt-${attempt.id}-label`;
           return <article className="attempt-card" key={attempt.id}>
             <p className="label">Attempt {index + 1}</p>
             <RecordingPlayer src={attempt.recordingUrl} labelledBy={labelId} />
             <span id={labelId} className="sr-only">Attempt {index + 1} recording</span>
+            {attempt.assessment?.alignment?.substantialMismatch === true && <p className="attempt-alignment-note">The model couldn’t reliably align this recording with the practice sentence, so word-level comparisons aren’t available.</p>}
           </article>;
         })}
-      </div>
-      {comparisonRows.length > 0 && <>
+        </div>
+        {comparisonRows.length > 0 && <>
         <button
           className="explanation-toggle attempt-comparison-toggle"
           aria-expanded={showComparisons}
           aria-controls="attempt-word-comparisons"
           onClick={() => setShowComparisons((visible) => !visible)}
         >
-          View model comparisons across attempts
+          View detailed model scores
           <span aria-hidden="true">{showComparisons ? '▴' : '▾'}</span>
         </button>
         <div id="attempt-word-comparisons" className="attempt-word-comparisons" hidden={!showComparisons}>
@@ -54,15 +71,16 @@ export default function AttemptComparison({ attempts }) {
                 {comparisonRows.map(({ word, values }) => <tr key={word}>
                   <th scope="row">{word}</th>
                   {values.map((value, index) => <td key={`${word}-${attempts[index].id}`}>
-                    {Number.isFinite(value?.accuracyScore) ? `${value.accuracyScore} / 100` : 'No score'}
-                    {value?.errorType && value.errorType !== 'None' ? <span className="comparison-error"> · {value.errorType}</span> : null}
+                    {formatWordScore(value)}
+                    {typeof value?.errorType === 'string' && !['none', 'unknown', 'unavailable'].includes(value.errorType.toLocaleLowerCase()) ? <span className="comparison-error"> · {value.errorType}</span> : null}
                   </td>)}
                 </tr>)}
               </tbody>
             </table>
           </div>
         </div>
-      </>}
+        </>}
+      </div>
     </section>
   );
 }

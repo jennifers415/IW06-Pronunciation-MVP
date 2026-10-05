@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { assessReferenceAlignment, MAX_AUDIO_SECONDS, SAMPLE_RATE } from '../shared/assessment.js';
+import { assessReferenceAlignment, hasUsableWordScore, MAX_AUDIO_SECONDS, SAMPLE_RATE } from '../shared/assessment.js';
 
 export class AssessmentError extends Error {
   constructor(status, message) {
@@ -40,10 +40,12 @@ export function normalizeAssessment(raw, referenceText = '') {
     .map((entry) => {
       // REST uses flat fields; also tolerate the SDK's nested assessment shape.
       const details = entry.PronunciationAssessment || entry;
+      const errorType = typeof details.ErrorType === 'string' ? details.ErrorType : 'Unknown';
+      const accuracyScore = score(details.AccuracyScore);
       return {
         word: entry.Word.trim(),
-        accuracyScore: score(details.AccuracyScore),
-        errorType: typeof details.ErrorType === 'string' ? details.ErrorType : 'Unknown',
+        accuracyScore: ['unknown', 'unavailable'].includes(errorType.trim().toLocaleLowerCase()) ? null : accuracyScore,
+        errorType,
       };
     });
 
@@ -52,7 +54,7 @@ export function normalizeAssessment(raw, referenceText = '') {
   const issues = words.filter((word) => word.errorType === 'Mispronunciation');
   const miscues = words.filter((word) => ['Omission', 'Insertion'].includes(word.errorType));
   const candidates = issues.length ? issues : miscues.length ? miscues
-    : words.filter((word) => word.accuracyScore !== null);
+    : words.filter((word) => hasUsableWordScore(word));
   const flaggedWord = [...candidates].sort((a, b) =>
     (a.accuracyScore ?? Infinity) - (b.accuracyScore ?? Infinity))[0] || null;
   return {

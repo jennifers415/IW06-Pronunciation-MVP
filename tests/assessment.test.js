@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { createApp } from '../server/app.js';
 import { normalizeAssessment, validateWav } from '../server/assessment.js';
 import { encodeWav } from '../src/audio.js';
-import { PHRASES, REFERENCE_TEXT, SAMPLE_RATE, assessReferenceAlignment, referenceContainsWord } from '../shared/assessment.js';
+import { PHRASES, REFERENCE_TEXT, SAMPLE_RATE, assessReferenceAlignment, formatWordScore, hasUsableWordScore, referenceContainsWord } from '../shared/assessment.js';
 
 const word = (Word, AccuracyScore, ErrorType = 'None') => ({ Word, AccuracyScore, ErrorType });
 const result = (Words = [word('Could', 96), word('library', 58, 'Mispronunciation')]) => ({
@@ -33,6 +33,22 @@ test('fallback selects lowest score, preserves zero, and keeps missing scores nu
   assert.equal(normalizeAssessment(result([word('a', undefined)])).flaggedWord, null);
   assert.equal(normalizeAssessment(result([])).flaggedWord, null);
   assert.equal(normalizeAssessment(result([word('a', 101), word('b', '58')])).flaggedWord, null);
+});
+
+test('unknown or unavailable word scores never become zero scores', () => {
+  const output = normalizeAssessment(result([
+    word('Could', 0, 'Unknown'),
+    word('you', 0, 'Unavailable'),
+    word('tell', null, 'Unknown'),
+    word('me', 0, 'None'),
+  ]), REFERENCE_TEXT);
+  assert.deepEqual(output.words.slice(0, 3).map((entry) => entry.accuracyScore), [null, null, null]);
+  assert.equal(output.words[3].accuracyScore, 0);
+  assert.equal(hasUsableWordScore(output.words[0]), false);
+  assert.equal(hasUsableWordScore(output.words[3]), true);
+  assert.equal(formatWordScore({ accuracyScore: null, errorType: 'Unknown' }), 'Not available');
+  assert.equal(formatWordScore({ accuracyScore: undefined, errorType: 'Unavailable' }), 'Not available');
+  assert.equal(formatWordScore({ accuracyScore: 0, errorType: 'None' }), '0 / 100');
 });
 
 test('normalizes nested SDK fields and retains unscored omissions safely', () => {

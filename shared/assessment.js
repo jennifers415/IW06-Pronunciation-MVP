@@ -18,6 +18,17 @@ export function referenceContainsWord(word, referenceText) {
   return tokens.some((token) => token.toLocaleLowerCase() === word.trim().toLocaleLowerCase());
 }
 
+export function hasUsableWordScore(word) {
+  return Number.isFinite(word?.accuracyScore)
+    && word.accuracyScore >= 0
+    && word.accuracyScore <= 100
+    && !['unknown', 'unavailable'].includes(word?.errorType?.trim?.().toLocaleLowerCase());
+}
+
+export function formatWordScore(word) {
+  return hasUsableWordScore(word) ? `${word.accuracyScore} / 100` : 'Not available';
+}
+
 export function assessReferenceAlignment(recognizedText, referenceText) {
   const tokens = (value) => typeof value === 'string'
     ? value.match(/[\p{L}\p{N}]+/gu)?.map((token) => token.toLocaleLowerCase()) || [] : [];
