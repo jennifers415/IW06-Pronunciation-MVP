@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import useRecording from './hooks/useRecording.js';
 import { PHRASES, referenceContainsWord } from '../shared/assessment.js';
+import { createPronunciationObservations, summarizePronunciationObservations } from '../shared/pronunciationPatterns.js';
 import { SCENARIOS, transcriptMatchesReference } from './scenarios.js';
 import { createLearnerJudgment, currentResponseForAttempt, responseForGoal } from './learnerState.js';
 import './App.css';
@@ -33,6 +34,7 @@ function App() {
   const analysisRef = useRef(null);
   const attemptsRef = useRef([]);
   const sessionPhrasesRef = useRef(sessionPhrases);
+  const pronunciationHistoryRef = useRef(summarizePronunciationObservations([]));
   const { status, setStatus, audioUrl, error, setError, busy, recordingRef, urlRef, clearDraftRecording, startRecording, stopRecording } = useRecording({
     onNewRecording: () => {
       setLearnerFirstJudgment({ goalId: '', value: '' });
@@ -73,6 +75,9 @@ function App() {
       ? { ...phrase, attempts: nextAttempts } : phrase);
     sessionPhrasesRef.current = nextSession;
     setSessionPhrases(nextSession);
+    pronunciationHistoryRef.current = summarizePronunciationObservations(
+      nextSession.flatMap((phrase) => phrase.attempts.flatMap((attempt) => attempt.pronunciationObservations || [])),
+    );
   }
 
   function clearSession() {
@@ -82,6 +87,7 @@ function App() {
     const reset = PHRASES.map((phrase) => ({ phraseId: phrase.id, attempts: [], finalDecision: null }));
     sessionPhrasesRef.current = reset;
     setSessionPhrases(reset);
+    pronunciationHistoryRef.current = summarizePronunciationObservations([]);
     setPhraseIndex(0);
     setAssessment(null);
     setLearnerFirstJudgment({ goalId: '', value: '' });
@@ -238,9 +244,11 @@ function App() {
         recording: wav,
         recordingUrl: urlRef.current,
         assessment: result,
+        assessedAt: new Date().toISOString(),
         referenceText,
         learnerDecision: null,
       };
+      attempt.pronunciationObservations = createPronunciationObservations(attempt);
       setAttemptHistory([...attemptsRef.current, attempt]);
       // The attempt now owns this URL; it must survive another recording.
       urlRef.current = '';
@@ -273,14 +281,29 @@ function App() {
   const fullTranscriptMatch = transcriptMatchesReference(returnedText, feedbackReferenceText);
   const explicitIssue = ['Mispronunciation', 'Omission', 'Insertion'].includes(candidateFlaggedWord?.errorType);
   const substantialMismatch = activeAssessment?.alignment?.substantialMismatch === true;
+  const signalsConflict = learnerGoal === 'understood' && Boolean(returnedText) && !fullTranscriptMatch && explicitIssue;
+  const explorationSignalsConflict = learnerGoal === 'explore' && Boolean(returnedText) && !fullTranscriptMatch && explicitIssue;
+  const exampleSignalsConflict = learnerGoal === 'example' && Boolean(returnedText) && !fullTranscriptMatch && explicitIssue;
   const learnerFirstResponse = responseForGoal(learnerFirstJudgment, learnerGoal);
   const learnerFirstWaiting = feedbackOrder === 'learner-first' && !learnerFirstResponse && !scenario;
+  const currentLearnerResponse = postAiResponse || learnerFirstResponse;
+  const learnerResponseConflicts = learnerGoal === 'understood' && !learnerFirstWaiting && (
+    (currentLearnerResponse === 'ai-misunderstood' || (currentLearnerResponse === 'understood' && (!fullTranscriptMatch || explicitIssue)))
+    || (currentLearnerResponse === 'unclear' && fullTranscriptMatch && !explicitIssue)
+  );
   const intelligibilityHasNoSpecificIssue = learnerGoal === 'understood' && fullTranscriptMatch && !explicitIssue;
   const explorationHasNoSpecificIssue = learnerGoal === 'explore' && !explicitIssue;
   const flaggedWordMatchesReference = referenceContainsWord(candidateFlaggedWord?.word, feedbackReferenceText);
   const exampleHasSpecificIssue = learnerGoal === 'example' && !substantialMismatch && flaggedWordMatchesReference && explicitIssue;
   const exampleHasNoSpecificIssue = learnerGoal === 'example' && !exampleHasSpecificIssue;
-  const flaggedWord = !intelligibilityHasNoSpecificIssue && !explorationHasNoSpecificIssue && !exampleHasNoSpecificIssue ? candidateFlaggedWord : null;
+  const modelSignalsSuggestDifference = !fullTranscriptMatch || explicitIssue || substantialMismatch;
+  const challengeAvailable = (
+    (currentLearnerResponse === 'understood' && modelSignalsSuggestDifference)
+    || (currentLearnerResponse === 'unclear' && fullTranscriptMatch && !explicitIssue)
+    || (currentLearnerResponse === 'none' && modelSignalsSuggestDifference)
+    || (currentLearnerResponse === 'example-satisfied' && modelSignalsSuggestDifference)
+  );
+  const flaggedWord = !intelligibilityHasNoSpecificIssue && !explorationHasNoSpecificIssue && !exampleHasNoSpecificIssue && !explorationSignalsConflict && !exampleSignalsConflict ? candidateFlaggedWord : null;
   const returnedTextHasWords = /[\p{L}\p{N}]/u.test(returnedText);
   const isMiscue = ['Omission', 'Insertion'].includes(flaggedWord?.errorType);
   
@@ -291,37 +314,38 @@ function App() {
     && flaggedWord.accuracyScore >= 0 && flaggedWord.accuracyScore <= 100;
   const hasUsefulWord = Boolean(!substantialMismatch && flaggedWord?.word && (isMiscue || showWordScore));
   const goalLabel = LEARNER_GOALS.find((goal) => goal.id === learnerGoal)?.label;
-  const directMessage = !flaggedWordMatchesReference ? 'The model returned a word outside this practice sentence. Listen again before treating it as a pronunciation finding.'
-    : flaggedWord?.errorType === 'Mispronunciation' ? `The model marked a lower pronunciation match for “${flaggedWord.word}”.`
-    : flaggedWord?.errorType === 'Omission' ? 'The model may not have detected this word. Listen again before drawing a conclusion.'
-      : flaggedWord?.errorType === 'Insertion' ? 'The model may have detected an extra word. Listen again before drawing a conclusion.'
-        : 'Lowest available model match. This comparison alone does not identify a pronunciation problem.';
+  const directMessage = !flaggedWordMatchesReference ? 'The AI listener returned a word outside this practice sentence. Listen again before treating it as a pronunciation finding.'
+    : flaggedWord?.errorType === 'Mispronunciation' ? `The AI listener marked a lower pronunciation match for “${flaggedWord.word}”.`
+    : flaggedWord?.errorType === 'Omission' ? 'The AI listener may not have detected this word. Listen again before drawing a conclusion.'
+      : flaggedWord?.errorType === 'Insertion' ? 'The AI listener may have detected an extra word. Listen again before drawing a conclusion.'
+        : 'Lowest available AI match. This comparison alone does not identify a pronunciation problem.';
   const reflectiveLabel = !flaggedWordMatchesReference ? 'Word returned outside the practice sentence'
     : learnerGoal === 'explore' ? 'A pronunciation difference the model noticed'
     : learnerGoal === 'example' ? 'A difference from the example'
-    : flaggedWord?.errorType === 'Mispronunciation' ? 'Word the model had difficulty matching'
-    : flaggedWord?.errorType === 'Omission' ? 'The assessment may have missed:'
-      : flaggedWord?.errorType === 'Insertion' ? 'The assessment detected an extra word:'
+    : flaggedWord?.errorType === 'Mispronunciation' ? 'Word the AI listener had difficulty matching'
+    : flaggedWord?.errorType === 'Omission' ? 'The AI listener may have missed:'
+      : flaggedWord?.errorType === 'Insertion' ? 'The AI listener detected an extra word:'
         : 'Word with the lowest match';
 
   const reflectiveContext = !flaggedWordMatchesReference
-    ? 'The returned word does not belong to this attempt’s reference sentence. That may reflect an alignment problem or an unusual model result.'
+    ? 'The returned word does not belong to this attempt’s reference sentence. That may reflect an alignment problem or an unusual AI listening result.'
     : flaggedWord?.errorType === 'Omission'
-    ? 'The model may not have detected this word. That does not establish that you left it out; listen again and decide.'
+    ? 'The AI listener may not have detected this word. That does not establish that you left it out; listen again and decide.'
     : flaggedWord?.errorType === 'Insertion'
-      ? 'The model matched a word outside the practice sentence. You can listen again and decide what to make of it.'
+      ? 'The AI listener matched a word outside the practice sentence. You can listen again and decide what to make of it.'
       : flaggedWord?.errorType === 'Mispronunciation'
-        ? 'The model marked a lower match with its pronunciation reference.'
-        : 'This word had the lowest available match, but the model did not mark a pronunciation issue. You can decide whether it needs more practice.';
+        ? 'The AI listener marked a lower match with its pronunciation reference.'
+        : 'This word had the lowest available match, but the AI listener did not mark a pronunciation difference. You can decide whether it deserves more attention.';
 
   const title = screen === 'goal'
-    ? 'What would you like to focus on?'
+    ? 'Explore the AI Listener'
     : screen === 'practice'
     ? 'Pronunciation Practice'
     : screen === 'complete'
       ? 'Practice complete.'
       : learnerFirstWaiting ? 'Listen to your recording'
         : condition === 'C' ? 'What the system heard'
+        : learnerGoal === 'understood' ? 'Here’s how the model interpreted your recording'
         : condition === 'B' ? 'Here’s what the model noticed' : 'Pronunciation Feedback';
 
   function selectGoal(goal) {
@@ -357,6 +381,13 @@ function App() {
     setResearchLog((entries) => [...entries, { event: 'learner-action', goal: learnerGoal, feedbackOrder, action, timestamp: new Date().toISOString() }]);
   }
 
+  function logChallenge(response) {
+    setResearchLog((entries) => [...entries, {
+      event: 'challenge-ai', phase: 'post-ai', goal: learnerGoal, feedbackOrder,
+      response, timestamp: new Date().toISOString(),
+    }]);
+  }
+
   function logFinalAction(action, response) {
     setResearchLog((entries) => [...entries, {
       event: 'final-action', goal: learnerGoal, feedbackOrder, response, action, timestamp: new Date().toISOString(),
@@ -378,13 +409,17 @@ function App() {
             learnerFirstWaiting={learnerFirstWaiting} feedbackRecordingUrl={feedbackRecordingUrl} feedbackReferenceText={feedbackReferenceText}
             feedbackAudioRef={feedbackAudioRef} returnedText={returnedText} returnedTextHasWords={returnedTextHasWords}
             fullTranscriptMatch={fullTranscriptMatch} substantialMismatch={substantialMismatch}
+            signalsConflict={signalsConflict} learnerResponseConflicts={learnerResponseConflicts} challengeAvailable={challengeAvailable}
+            explorationSignalsConflict={explorationSignalsConflict} conflictWord={(explorationSignalsConflict || exampleSignalsConflict || (substantialMismatch && explicitIssue)) ? candidateFlaggedWord : null}
+            exampleSignalsConflict={exampleSignalsConflict}
             explorationHasNoSpecificIssue={explorationHasNoSpecificIssue} exampleHasNoSpecificIssue={exampleHasNoSpecificIssue}
             intelligibilityHasNoSpecificIssue={intelligibilityHasNoSpecificIssue} hasUsefulWord={hasUsefulWord}
             flaggedWord={flaggedWord}
             showWordScore={showWordScore} reflectiveLabel={reflectiveLabel} reflectiveContext={reflectiveContext}
             directMessage={directMessage} expanded={expanded} onToggleExpanded={() => setExpanded(!expanded)} condition={condition}
             learnerFirstResponse={learnerFirstResponse} onListen={listenAgain} onHearExample={hearExampleAgain}
-            onInitialResponse={handleInitialResponse} onResponseChange={handlePostResponse} onAction={logAction}
+            onInitialResponse={handleInitialResponse} onResponseChange={handlePostResponse} onAction={logAction} onChallenge={logChallenge}
+            requirePracticeReason
             onPractice={() => { logFinalAction('retry', currentResponseForAttempt({ preAi: learnerFirstJudgment, postAi: postAiResponse }, learnerGoal)); rememberPreference(flaggedWord?.word, 'practice'); startAnotherAttempt(); }}
             onFinish={(keep) => { logFinalAction('continue', currentResponseForAttempt({ preAi: learnerFirstJudgment, postAi: postAiResponse }, learnerGoal)); rememberPreference(flaggedWord?.word, keep ? 'keep' : 'unsure'); finishPractice(keep); }}
             finishLabel={phraseIndex < PHRASES.length - 1 ? 'Next phrase' : 'Finish session'} currentPhraseAttempts={currentPhraseAttempts} scenarioId={scenarioId}

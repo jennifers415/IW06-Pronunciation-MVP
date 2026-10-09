@@ -3,6 +3,7 @@ import { LEARNER_GOALS } from '../learnerGoals.js';
 export default function GoalScreen({ selectedGoal, onSelectGoal, onContinue }) {
   return (
     <div className="goal-selection">
+      <p className="goal-introduction">Test how this AI listener interprets your speech. Speak naturally; you do not need to change how you speak for the system.</p>
       <div className="goal-options" role="radiogroup" aria-label="Learner goal">
         {LEARNER_GOALS.map((goal) => (
           <button
