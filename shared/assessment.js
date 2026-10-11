@@ -1,15 +1,7 @@
-export const PHRASES = [
-  { id: 'library', text: 'Could you tell me where the library is?' },
-  { id: 'comfortable', text: 'This chair is very comfortable.' },
-];
-export const DEFAULT_PHRASE_ID = PHRASES[0].id;
-export const REFERENCE_TEXT = PHRASES[0].text;
+// Keep existing client/server imports compatible with the reusable phrase catalog.
+export { PHRASES, DEFAULT_PHRASE_ID, REFERENCE_TEXT, getPhrase } from './phrases.js';
 export const MAX_AUDIO_SECONDS = 30;
 export const SAMPLE_RATE = 16000;
-
-export function getPhrase(phraseId = DEFAULT_PHRASE_ID) {
-  return PHRASES.find((phrase) => phrase.id === phraseId) || null;
-}
 
 // Guards the UI against pairing a word-level result with the wrong phrase
 export function referenceContainsWord(word, referenceText) {

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { formatWordScore, referenceContainsWord } from '../../shared/assessment.js';
 import RecordingPlayer from './RecordingPlayer.jsx';
 
 export default function AttemptComparison({ attempts }) {
+  const id = useId();
   const [showAttempts, setShowAttempts] = useState(false);
   const [showComparisons, setShowComparisons] = useState(false);
   if (attempts.length < 2) return null;
@@ -21,27 +22,27 @@ export default function AttemptComparison({ attempts }) {
   }));
 
   return (
-    <section className="attempt-comparison" aria-labelledby="attempt-comparison-heading">
+    <section className="attempt-comparison" aria-labelledby={`${id}-attempt-comparison-heading`}>
       <p className="label">Your attempts</p>
       <p className="attempt-count">{attempts.length} recordings</p>
       <button
         className="explanation-toggle attempt-toggle"
         aria-expanded={showAttempts}
-        aria-controls="attempt-details"
+        aria-controls={`${id}-attempt-details`}
         onClick={() => setShowAttempts((visible) => !visible)}
       >
         {showAttempts ? 'Hide attempt comparison' : 'Compare attempts'}
         <span aria-hidden="true">{showAttempts ? '▴' : '▾'}</span>
       </button>
-      <div id="attempt-details" hidden={!showAttempts}>
-        <h2 id="attempt-comparison-heading">Listen and compare</h2>
+      <div id={`${id}-attempt-details`} hidden={!showAttempts}>
+        <h2 id={`${id}-attempt-comparison-heading`}>Listen and compare</h2>
         <p className="hint">Listen to your recordings side by side. You may notice differences between attempts even when the model does not flag an issue.</p>
         <div className="attempt-grid">
         {attempts.map((attempt, index) => {
-          const labelId = `attempt-${attempt.id}-label`;
+          const labelId = `${id}-attempt-${attempt.id}-label`;
           return <article className="attempt-card" key={attempt.id}>
             <p className="label">Attempt {index + 1}</p>
-            <RecordingPlayer src={attempt.recordingUrl} labelledBy={labelId} />
+            {attempt.recordingUrl ? <RecordingPlayer src={attempt.recordingUrl} labelledBy={labelId} /> : <p className="hint">No recording is attached to this attempt.</p>}
             <span id={labelId} className="sr-only">Attempt {index + 1} recording</span>
             {attempt.assessment?.alignment?.substantialMismatch === true && <p className="attempt-alignment-note">The model couldn’t reliably align this recording with the practice sentence, so word-level comparisons aren’t available.</p>}
           </article>;
@@ -51,13 +52,13 @@ export default function AttemptComparison({ attempts }) {
         <button
           className="explanation-toggle attempt-comparison-toggle"
           aria-expanded={showComparisons}
-          aria-controls="attempt-word-comparisons"
+          aria-controls={`${id}-attempt-word-comparisons`}
           onClick={() => setShowComparisons((visible) => !visible)}
         >
           View detailed model scores
           <span aria-hidden="true">{showComparisons ? '▴' : '▾'}</span>
         </button>
-        <div id="attempt-word-comparisons" className="attempt-word-comparisons" hidden={!showComparisons}>
+        <div id={`${id}-attempt-word-comparisons`} className="attempt-word-comparisons" hidden={!showComparisons}>
           <p className="hint">These are comparisons with the model’s reference. You can decide whether any difference matters to you.</p>
           <div className="comparison-table-wrap">
             <table>

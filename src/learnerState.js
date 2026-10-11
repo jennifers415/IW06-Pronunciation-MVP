@@ -21,6 +21,11 @@ export function responseForGoal(judgment, goalId) {
 }
 
 export function currentResponseForAttempt({ preAi, postAi }, goalId) {
-  const post = responseForGoal({ goalId, value: postAi }, goalId);
+  const post = isValidPostAiResponse(goalId, postAi) ? postAi : '';
   return post || responseForGoal(preAi, goalId);
+}
+
+export function isValidPostAiResponse(goalId, value) {
+  return isValidLearnerResponse(goalId, value)
+    || (Object.hasOwn(GOAL_RESPONSE_VALUES, goalId) && value === 'ai-misunderstood');
 }

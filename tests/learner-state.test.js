@@ -1,6 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLearnerJudgment, currentResponseForAttempt, isValidLearnerResponse, responseForGoal } from '../src/learnerState.js';
+import { GOAL_RESPONSE_VALUES, createLearnerJudgment, currentResponseForAttempt, isValidLearnerResponse, isValidPostAiResponse, responseForGoal } from '../src/learnerState.js';
+
+for (const [goal, values] of Object.entries(GOAL_RESPONSE_VALUES)) {
+  test(`${goal}: AI misunderstanding is post-AI only and survives final response resolution`, () => {
+    assert.equal(isValidPostAiResponse(goal, 'ai-misunderstood'), true);
+    assert.equal(isValidLearnerResponse(goal, 'ai-misunderstood'), false);
+    assert.equal(createLearnerJudgment(goal, 'ai-misunderstood').value, '');
+    for (const preAi of [undefined, createLearnerJudgment(goal, values[0])]) {
+      assert.equal(currentResponseForAttempt({ preAi, postAi: 'ai-misunderstood' }, goal), 'ai-misunderstood');
+    }
+    for (const value of values) {
+      assert.equal(isValidPostAiResponse(goal, value), true);
+      assert.equal(currentResponseForAttempt({ postAi: value }, goal), value);
+    }
+    assert.equal(currentResponseForAttempt({ preAi: createLearnerJudgment(goal, values[0]), postAi: 'invalid' }, goal), values[0]);
+  });
+}
+
+test('unknown goals cannot accept AI misunderstanding', () => {
+  assert.equal(isValidPostAiResponse('invalid', 'ai-misunderstood'), false);
+});
 
 test('goal response mappings accept only the active goal values', () => {
   assert.deepEqual(createLearnerJudgment('understood', 'understood'), { goalId: 'understood', value: 'understood' });

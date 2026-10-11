@@ -98,3 +98,83 @@ tests/     Assessment and scenario tests
 - The prototype uses two fixed English phrases.
 - Research controls include live Azure assessment and simulated critique scenarios.
 - Microphone access requires localhost or HTTPS.
+
+## Optional recommendations and silent testing
+
+Recommendations reuse the existing word observations and three-distinct-attempt
+recurrence threshold. Sound labels come from phrase metadata: whole-word AI
+scores cannot establish which sound caused a difference. Recommendations offer
+possible focuses, not diagnoses or assignments.
+
+In live feedback, learners can accept (save), reject, or redirect a focus. A
+saved focus offers existing practice phrases. From the session summary, learners
+can explicitly start one and return to the summary afterward. Rejected and
+redirected focuses are suppressed as new evidence arrives. Choices survive new
+practice sessions but reset on page reload; no new persistent storage is used.
+
+To test without a microphone or Azure credentials:
+
+1. Run `npm run dev` and open Vite's Local URL (normally `http://localhost:5173`).
+2. Open **Research controls → Recommendation demo → Simulated practice history**.
+3. Select **Limited evidence**: expect no recommendation. Select **Recurring R
+   observations**: inspect the recommendation, then switch to **My Progress** in the demo to expand the observations and attempt history.
+4. Reject R, then select **More R and L evidence**. R stays suppressed; L is
+   offered. Reject L to exhaust the suggestions.
+5. Open **Demo settings and reset**, click **Reset demo choices**, accept a suggestion, then switch to **Practice** in the demo to inspect the saved
+   phrases. Only three appear initially; expand **Show more phrases** for the rest. **Practice this phrase** displays a simulated selection confirmation;
+   it does not request microphone access or call Azure.
+6. Reset again, choose **Choose a different focus**, select a sound, and click
+   **Use my chosen focus**. The phrase choices follow your selected focus even
+   without AI evidence for that sound.
+7. Switch the demo learner goal to check the explanation. Select **Unreliable
+   alignment** after resetting choices: expect no recommendation.
+
+Demo histories and choices stay separate from live practice. Switching histories
+retains demo choices so suppression can be tested against new evidence. The
+existing development research log also records decisions:
+
+```js
+console.table(window.__pronunciationResearchLog.filter(
+  event => event.event === 'recommendation-decision'
+));
+```
+
+Demo events have `simulated: true`; live events have `simulated: false`.
+Automated tests cover recommendation decisions, evidence, rendering, and optional
+practice handlers. They do not replace browser microphone or live Azure testing.
+
+## Learner views
+
+The main workspace has **Practice**, **My Progress**, and **My Focus** tabs.
+Practice keeps recording and feedback together; My Progress contains recurring
+observations and expandable attempt history; My Focus contains recommendation
+choices. View switches preserve local state. Use Left/Right arrows or Home/End
+on the tab bar, then Tab to reach the active panel. Switching is disabled during
+recording/processing. Learner-first reflection still precedes AI evidence,
+including in the progress and focus views.
+
+Research controls are collapsed below the main workspace. The recommendation
+history demo uses the same three-view layout with separate simulated data and
+choices. Accept a focus in its My Focus tab, choose a phrase in Practice, and
+inspect evidence in My Progress. Switching away and back should retain the focus,
+phrase selection, and expanded evidence. Demo practice never requests audio.
+For feedback/challenge testing, use the existing Studio scenario selector in
+Feedback setup; the app returns to its main Practice view.
+
+## Desktop and mobile layout checks
+
+The workspace is capped at 1320px. At viewport widths of 1024px and above, the
+active workflow and contextual sidebar use approximately 65/35 columns below the
+navigation. The sidebar sticks only on desktop viewports at least 800px tall;
+smaller screens stack it below the workflow.
+
+- At 1440px wide, check all three main tabs and the simulated-history demo.
+  Expand evidence and verify that the sidebar stays readable while scrolling.
+- At 390px and 768px wide, check the single column, phrase expansion, recording
+  controls, and tab navigation. There should be no page-level horizontal scroll.
+- Before assessment, expect only the learner goal, saved focus, and an explanatory
+  placeholder in the sidebar. During learner-first reflection, no recent AI
+  observations or scores should appear there. After reflection, eligible recent
+  observations can appear with uncertainty language.
+- Use the simulated-history demo to check populated columns without audio. It is
+  explicitly simulated and remains separate from the live learner-first flow.
